@@ -13,19 +13,21 @@ namespace Gobi.HolePuncher.Common
 
         public UdpSocket()
         {
-            _socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.ReuseAddress, true);
+            // _socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.ReuseAddress, true);
         }
 
-        public ChannelReader<UdpReceiveResult> Listen(
-            IPEndPoint endPoint,
+        public void Bind(IPEndPoint endPoint)
+        {
+            _socket.Bind(endPoint);
+        }
+
+        public ChannelReader<UdpResult> Listen(
             int receiveBound = 100,
             CancellationToken cancellationToken = default)
         {
             var buffer = new byte[0xffff];
-            _socket.Bind(endPoint);
-            var remoteEndpoint = new IPEndPoint(IPAddress.Any, 0);
-
-            var receiveChannel = Channel.CreateBounded<UdpReceiveResult>(new BoundedChannelOptions(receiveBound)
+            
+            var receiveChannel = Channel.CreateBounded<UdpResult>(new BoundedChannelOptions(receiveBound)
             {
                 FullMode = BoundedChannelFullMode.Wait,
                 SingleWriter = true,
@@ -36,10 +38,11 @@ namespace Gobi.HolePuncher.Common
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
+                    EndPoint endpoint = new IPEndPoint(IPAddress.Any, 0);
                     var result = await _socket.ReceiveFromAsync(new ArraySegment<byte>(buffer), SocketFlags.None,
-                        remoteEndpoint);
+                        endpoint);
                     await receiveChannel.Writer.WriteAsync(
-                        new UdpReceiveResult(
+                        new UdpResult(
                             result.RemoteEndPoint as IPEndPoint,
                             new ReadOnlyMemory<byte>(buffer, 0, result.ReceivedBytes)
                         ),
@@ -57,12 +60,12 @@ namespace Gobi.HolePuncher.Common
             _socket.Connect(endPoint);
         }
 
-        public async Task<int> SendAsync(byte[] data, IPEndPoint remote)
+        public async Task<int> SendToAsync(byte[] data, IPEndPoint remote)
         {
             return await _socket.SendToAsync(data, SocketFlags.None, remote);
         }
 
-        public async Task<UdpReceiveResult> ReceiveAsync(IPEndPoint remote, ArraySegment<byte> buffer,
+        public async Task<UdpResult> ReceiveAsync(IPEndPoint remote, ArraySegment<byte> buffer,
             CancellationToken cancellationToken)
         {
             using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
@@ -71,7 +74,7 @@ namespace Gobi.HolePuncher.Common
             var task = await Task.WhenAny(Task.Delay(-1, cancellationToken), receiveTask);
             if (task != receiveTask) throw new OperationCanceledException();
             var result = await receiveTask;
-            return new UdpReceiveResult(
+            return new UdpResult(
                 result.RemoteEndPoint as IPEndPoint,
                 buffer.AsMemory());
         }

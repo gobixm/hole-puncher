@@ -29,18 +29,19 @@ namespace Gobi.HolePuncher.Relay
 
         public void Start()
         {
-            var reader = _socket.Listen(new IPEndPoint(IPAddress.Any, 6000), 100, _cancellationTokenSource.Token);
+            _socket.Bind(new IPEndPoint(IPAddress.Any, 6000));
+            var reader = _socket.Listen(100, _cancellationTokenSource.Token);
 
             Task.Run(() => ProcessMessages(reader));
         }
 
-        private void ProcessMessages(ChannelReader<UdpReceiveResult> reader)
+        private void ProcessMessages(ChannelReader<UdpResult> reader)
         {
             var messages = reader.ReadAllAsync(_cancellationTokenSource.Token);
             messages.ForEachAwaitAsync(ProcessMessageAsync);
         }
 
-        private async Task ProcessMessageAsync(UdpReceiveResult receive)
+        private async Task ProcessMessageAsync(UdpResult receive)
         {
             Logger.Information("Got message from {Remote} size: {Size}", receive.Remote, receive.Data.Length);
             try
@@ -72,7 +73,8 @@ namespace Gobi.HolePuncher.Relay
             Logger.Information("Punch hole Request {Request} from {Endpoint}", request, sender);
             if (sourcePeer == null || targetPeer == null)
             {
-                await _socket.SendAsync(_serializer.SerializeBytes(new PunchHole
+                Logger.Information("Peer not found");
+                await _socket.SendToAsync(_serializer.SerializeBytes(new PunchHole
                 {
                     Id = request.TargetPeerId,
                     PrivateEndpoint = null,
@@ -101,7 +103,8 @@ namespace Gobi.HolePuncher.Relay
                     Port = peer.PublicEndpoint.Port
                 }
             };
-            await _socket.SendAsync(_serializer.SerializeBytes(response), target);
+            Logger.Information("Sending punch response to {Target}", target);
+            await _socket.SendToAsync(_serializer.SerializeBytes(response), target);
         }
 
         private void ProcessRegisterPeer(RegisterPeer registerPeer, IPEndPoint sender)

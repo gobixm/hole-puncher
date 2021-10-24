@@ -20,24 +20,24 @@ namespace Gobi.HolePuncher.Peer
         {
             _relay = relay;
             _serializer = serializer;
-            // _socket.Connect(relay);
+            _socket.Connect(relay);
         }
 
-        public void Listen(Func<object, IPEndPoint, Task> onMessage, IPEndPoint listen,
+        public void Listen(Func<object, IPEndPoint, Task> onMessage,
             CancellationToken cancellationToken)
         {
-            var reader = _socket.Listen(listen, 100, cancellationToken);
+            var reader = _socket.Listen(100, cancellationToken);
             Task.Run(() => ProcessMessages(reader, onMessage, cancellationToken));
         }
 
-        private void ProcessMessages(ChannelReader<UdpReceiveResult> reader, Func<object, IPEndPoint, Task> onMessage,
+        private void ProcessMessages(ChannelReader<UdpResult> reader, Func<object, IPEndPoint, Task> onMessage,
             CancellationToken cancellationToken)
         {
             var messages = reader.ReadAllAsync(cancellationToken);
             messages.ForEachAwaitAsync(x => ProcessMessageAsync(x, onMessage), cancellationToken);
         }
 
-        private async Task ProcessMessageAsync(UdpReceiveResult receive, Func<object, IPEndPoint, Task> onMessage)
+        private async Task ProcessMessageAsync(UdpResult receive, Func<object, IPEndPoint, Task> onMessage)
         {
             try
             {
@@ -52,14 +52,14 @@ namespace Gobi.HolePuncher.Peer
         public async Task RegisterAsync(RegisterPeer registerPeer)
         {
             var message = _serializer.SerializeBytes(registerPeer);
-            await _socket.SendAsync(message, _relay);
+            await _socket.SendToAsync(message, _relay);
         }
 
         public async Task<TResponse> RequestAsync<TRequest, TResponse>(TRequest request,
             CancellationToken cancellationToken) where TResponse : class
         {
             var message = _serializer.SerializeBytes(request);
-            await _socket.SendAsync(message, _relay);
+            await _socket.SendToAsync(message, _relay);
             var reply = new byte[0xffff];
             var result = await _socket.ReceiveAsync(_relay, new ArraySegment<byte>(reply), cancellationToken);
             return _serializer.Deserialize(result.Data) as TResponse;
@@ -67,7 +67,7 @@ namespace Gobi.HolePuncher.Peer
 
         public async Task PunchAsync(PunchHoleRequest punchHoleRequest)
         {
-            await _socket.SendAsync(_serializer.SerializeBytes(punchHoleRequest), _relay);
+            await _socket.SendToAsync(_serializer.SerializeBytes(punchHoleRequest), _relay);
         }
     }
 }
